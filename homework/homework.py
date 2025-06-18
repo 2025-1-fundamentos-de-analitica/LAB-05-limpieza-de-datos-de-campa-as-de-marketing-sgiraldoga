@@ -3,7 +3,10 @@ Escriba el codigo que ejecute la accion solicitada.
 """
 
 # pylint: disable=import-outside-toplevel
-
+from pathlib import Path
+import os
+import pandas as pd
+import zipfile
 
 def clean_campaign_data():
     """
@@ -50,8 +53,55 @@ def clean_campaign_data():
 
     """
 
-    return
+    input_path = Path("files/input/")
+    output_path = Path("files/output/")
+    output_path.mkdir(parents=True, exist_ok=True)
+    zip_files = list(input_path.glob("*.csv.zip"))
+    if not zip_files:
+        print("No se encontraron archivos zip en la carpeta de entrada.")
+        return
+    for zip_file in zip_files:
+        with zipfile.ZipFile(zip_file, "r") as zip_ref:
+            zip_ref.extractall(input_path)
+    csv_files = list(input_path.glob("*.csv"))
+    
+    combined_df = pd.DataFrame()
+    for csv_file in csv_files:
+        combined_df = pd.concat([combined_df, pd.read_csv(csv_file)], ignore_index=True)
+    
+    client_df = pd.DataFrame()
+    client_df["client_id"] = combined_df["client_id"]
+    client_df["age"] = combined_df["age"]
+    client_df["job"] = combined_df["job"].str.replace(".", "").str.replace("-", "_")
+    client_df["marital"] = combined_df["marital"]
+    client_df["education"] = combined_df["education"].str.replace(".", "_")
+    client_df["credit_default"] = combined_df["credit_default"].apply(lambda x: 1 if x == "yes" else 0)
+    client_df["mortgage"] = combined_df["mortgage"].apply(lambda x: 1 if x == "yes" else 0)
 
+    client_df.to_csv(output_path / "client.csv", index=False)
+
+    campaign_df = pd.DataFrame()
+    campaign_df["client_id"] = combined_df["client_id"]
+    campaign_df["number_contacts"] = combined_df["number_contacts"]
+    campaign_df["contact_duration"] = combined_df["contact_duration"]
+    campaign_df["previous_campaign_contacts"] = combined_df["previous_campaign_contacts"]
+    campaign_df["previous_outcome"] = combined_df["previous_outcome"].apply(lambda x: 1 if x == "success" else 0)
+    campaign_df["campaign_outcome"] = combined_df["campaign_outcome"].apply(lambda x: 1 if x == "yes" else 0)
+    campaign_df["last_contact_date"] = pd.to_datetime(combined_df["day"].astype(str) + "-" + combined_df["month"].astype(str) + "-2022")
+    campaign_df.to_csv(output_path / "campaign.csv", index=False)
+
+    economics_df = pd.DataFrame()
+    economics_df["client_id"] = combined_df["client_id"]
+    economics_df["cons_price_idx"] = combined_df["cons_price_idx"]
+    economics_df["euribor_three_months"] = combined_df["euribor_three_months"]
+    economics_df.to_csv(output_path / "economics.csv", index=False)
+
+    for csv_file in csv_files:
+        os.remove(csv_file)
+    print("Archivos procesados y guardados en:", output_path)
+    print("Proceso completado.")
+
+    return None
 
 if __name__ == "__main__":
     clean_campaign_data()
